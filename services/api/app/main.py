@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 
+from app.api.routes import planning_profile
+
 app = FastAPI(title="Room for Both API")
+
+app.include_router(planning_profile.router)
 
 
 @app.get("/health")

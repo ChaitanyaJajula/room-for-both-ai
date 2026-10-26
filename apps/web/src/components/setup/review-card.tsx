@@ -37,7 +37,7 @@ export function ReviewCard({ profile }: { profile: PlanningProfile }) {
         Here is what your week will respect
       </h2>
       <p className="mt-1 text-sm text-muted">
-        Kept on this page only for now. Nothing has been sent anywhere.
+        Checked by the Room for Both service. Not saved yet.
       </p>
       <dl className="mt-4">
         <Row label="Timezone">{profile.timezone}</Row>

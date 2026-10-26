@@ -34,3 +34,9 @@ export interface PlanningProfile {
   minimum_break_minutes: number;
   protected_personal_minutes_per_week: number;
 }
+
+// Mirrors PlanningProfileValidationResponse in services/api/app/api/routes/planning_profile.py.
+export interface PlanningProfileValidationResponse {
+  status: "valid";
+  profile: PlanningProfile;
+}

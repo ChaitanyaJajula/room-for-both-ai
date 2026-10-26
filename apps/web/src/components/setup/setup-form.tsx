@@ -11,6 +11,7 @@ import {
   type SetupErrors,
   type SetupFormValues,
 } from "@/lib/setup";
+import { validatePlanningProfile } from "@/lib/api";
 import { DAYS_OF_WEEK, type DayOfWeek, type PlanningProfile } from "@/types/planning-profile";
 
 import { Field, Section, SelectInput, TextInput } from "./fields";
@@ -33,11 +34,20 @@ type NumericKey =
   | "minimumBreakMinutes"
   | "protectedPersonalMinutesPerWeek";
 
+type SubmitStatus =
+  | { state: "idle" }
+  | { state: "submitting" }
+  | { state: "success" }
+  | { state: "error"; title: string; messages: string[] };
+
 export function SetupForm() {
   const [values, setValues] = useState<SetupFormValues>(DEFAULT_VALUES);
   const [errors, setErrors] = useState<SetupErrors>({});
   const [profile, setProfile] = useState<PlanningProfile | null>(null);
-  const reviewRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<SubmitStatus>({ state: "idle" });
+  const inFlight = useRef(false);
+  const statusRef = useRef<HTMLDivElement>(null);
+  const submitting = status.state === "submitting";
 
   const set = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -60,18 +70,55 @@ export function SetupForm() {
 
   const useMyTimezone = () => set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-  const onSubmit = (e: FormEvent) => {
+  const showStatus = (next: SubmitStatus) => {
+    setStatus(next);
+    requestAnimationFrame(() =>
+      statusRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (inFlight.current) return;
+
     const found = validateSetup(values);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setProfile(null);
+      setStatus({ state: "idle" });
       return;
     }
-    setProfile(toPlanningProfile(values));
-    requestAnimationFrame(() =>
-      reviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
+
+    inFlight.current = true;
+    setProfile(null);
+    setStatus({ state: "submitting" });
+    try {
+      const result = await validatePlanningProfile(toPlanningProfile(values));
+      if (result.ok) {
+        // Keep the backend's normalized profile, not the locally built one.
+        setProfile(result.profile);
+        showStatus({ state: "success" });
+      } else if (result.kind === "validation") {
+        showStatus(
+          {
+            state: "error",
+            title: "The service found something to fix",
+            messages: result.messages,
+          },
+        );
+      } else {
+        showStatus(
+          {
+            state: "error",
+            title:
+              result.kind === "network" ? "Could not reach the service" : "Something went wrong",
+            messages: [result.message],
+          },
+        );
+      }
+    } finally {
+      inFlight.current = false;
+    }
   };
 
   return (
@@ -248,13 +295,38 @@ export function SetupForm() {
 
         <button
           type="submit"
-          className="w-full rounded-full bg-teal-700 px-6 py-3 text-base font-semibold text-white shadow-soft hover:bg-teal-800 sm:w-auto"
+          disabled={submitting}
+          aria-busy={submitting}
+          className="w-full rounded-full bg-teal-700 px-6 py-3 text-base font-semibold text-white shadow-soft hover:bg-teal-800 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
         >
-          Review setup
+          {submitting ? "Checking your setup…" : "Review setup"}
         </button>
       </form>
 
-      <div ref={reviewRef} className="scroll-mt-6">
+      <div ref={statusRef} aria-live="polite" className="scroll-mt-6">
+        {status.state === "error" ? (
+          <div
+            role="alert"
+            className="rounded-2xl border border-terracotta/50 bg-terracotta/10 p-5"
+          >
+            <h2 className="font-serif text-lg font-semibold text-terracotta-dark">
+              {status.title}
+            </h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+              {status.messages.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {status.state === "success" ? (
+          <p className="rounded-2xl border border-teal-700/40 bg-teal-700/10 p-4 text-sm font-medium text-teal-800">
+            Your setup is valid. The service accepted it.
+          </p>
+        ) : null}
+      </div>
+
+      <div>
         {profile ? <ReviewCard profile={profile} /> : null}
       </div>
     </div>

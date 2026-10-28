@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analysis, calendar, capacity, planning_profile
+from app.api.routes import analysis, calendar, capacity, plan, planning_profile
 from app.core.config import get_settings
 
 app = FastAPI(title="Room for Both API")
@@ -19,6 +19,7 @@ app.include_router(planning_profile.router)
 app.include_router(calendar.router)
 app.include_router(capacity.router)
 app.include_router(analysis.router)
+app.include_router(plan.router)
 
 
 @app.get("/health")

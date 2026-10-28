@@ -1,4 +1,10 @@
 import type {
+  CalendarCommitment,
+  DemoCalendarResponse,
+  WeeklyAnalysisResponse,
+} from "@/types/analysis";
+import { isDemoCalendar, isWeeklyAnalysisResponse } from "@/lib/guards";
+import type {
   PlanningProfile,
   PlanningProfileValidationResponse,
 } from "@/types/planning-profile";
@@ -80,4 +86,63 @@ export async function validatePlanningProfile(
       message: "The service sent a response we did not understand.",
     };
   }
+}
+
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; message: string };
+
+const UNREACHABLE = "We could not reach the Room for Both service. Check that it is running and try again.";
+const UNEXPECTED = "The service sent a response we did not understand. Please try again.";
+const CALENDAR_TIMEOUT_MS = 15_000;
+const ANALYSIS_TIMEOUT_MS = 90_000;
+
+// Shared fetch + JSON handling. Error messages are fixed strings: raw bodies, URLs and
+// status details are never passed to the UI.
+async function requestJson<T>(
+  path: string,
+  init: RequestInit,
+  isValid: (body: unknown) => body is T,
+  failure: string,
+): Promise<ApiResult<T>> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch {
+    return { ok: false, message: UNREACHABLE };
+  }
+  if (!response.ok) return { ok: false, message: failure };
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, message: UNEXPECTED };
+  }
+  return isValid(body) ? { ok: true, data: body } : { ok: false, message: UNEXPECTED };
+}
+
+export function getDemoCalendar(signal?: AbortSignal): Promise<ApiResult<DemoCalendarResponse>> {
+  return requestJson(
+    "/api/v1/calendar/demo",
+    { method: "GET", signal: signal ?? AbortSignal.timeout(CALENDAR_TIMEOUT_MS) },
+    isDemoCalendar,
+    "The prepared demo calendar could not be loaded. Please try again.",
+  );
+}
+
+export function analyzeWeek(
+  profile: PlanningProfile,
+  commitments: CalendarCommitment[],
+  signal?: AbortSignal,
+): Promise<ApiResult<WeeklyAnalysisResponse>> {
+  return requestJson(
+    "/api/v1/analysis/weekly",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile, commitments }),
+      signal: signal ?? AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
+    },
+    isWeeklyAnalysisResponse,
+    "Your week could not be analyzed right now. Please try again.",
+  );
 }

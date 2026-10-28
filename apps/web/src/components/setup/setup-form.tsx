@@ -15,6 +15,7 @@ import { validatePlanningProfile } from "@/lib/api";
 import { DAYS_OF_WEEK, type DayOfWeek, type PlanningProfile } from "@/types/planning-profile";
 
 import { Field, Section, SelectInput, TextInput } from "./fields";
+import { AnalyzePanel } from "@/components/analysis/analyze-panel";
 import { ReviewCard } from "./review-card";
 
 const COMMON_TIMEZONES = [
@@ -49,8 +50,20 @@ export function SetupForm() {
   const statusRef = useRef<HTMLDivElement>(null);
   const submitting = status.state === "submitting";
 
-  const set = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) =>
+  // Any edit invalidates the validated profile, so analysis never runs on stale settings.
+  const set = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) => {
     setValues((prev) => ({ ...prev, [key]: value }));
+    setProfile(null);
+    setStatus((prev) => (prev.state === "success" ? { state: "idle" } : prev));
+  };
+
+  const editPreferences = () => {
+    setProfile(null);
+    setStatus({ state: "idle" });
+    const timezone = document.getElementById("timezone");
+    timezone?.scrollIntoView({ behavior: "smooth", block: "center" });
+    timezone?.focus({ preventScroll: true });
+  };
 
   const text = (key: keyof SetupFormValues) => (e: ChangeEvent<HTMLInputElement>) =>
     set(key, e.target.value as never);
@@ -329,6 +342,8 @@ export function SetupForm() {
       <div>
         {profile ? <ReviewCard profile={profile} /> : null}
       </div>
+
+      {profile ? <AnalyzePanel profile={profile} onEditPreferences={editPreferences} /> : null}
     </div>
   );
 }

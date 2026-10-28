@@ -1,5 +1,6 @@
 // Runtime checks for backend JSON, so a malformed response never reaches rendering.
 import type { DemoCalendarResponse, WeeklyAnalysisResponse } from "@/types/analysis";
+import type { ApprovedPlanRecord, PlanResponse } from "@/types/plan";
 import { DAYS_OF_WEEK } from "@/types/planning-profile";
 
 type Obj = Record<string, unknown>;
@@ -105,5 +106,78 @@ export function isWeeklyAnalysisResponse(body: unknown): body is WeeklyAnalysisR
     isWeekly(body.capacity.weekly) &&
     isSignals(body.capacity.signals) &&
     isAnalysis(body.analysis)
+  );
+}
+
+function isBlock(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isNonEmpty(v.id) &&
+    (v.outcome_type === "work" || v.outcome_type === "personal") &&
+    isNonEmpty(v.outcome_title) &&
+    isDay(v.day) &&
+    isStr(v.start_time) &&
+    isStr(v.end_time) &&
+    isMinutes(v.duration_minutes) &&
+    typeof v.inside_preferred_focus_window === "boolean" &&
+    typeof v.uses_soft_boundary === "boolean"
+  );
+}
+
+function isConstraintsSummary(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isMinutes(v.candidate_slots) &&
+    isMinutes(v.slots_blocked_by_commitments) &&
+    isMinutes(v.slots_blocked_by_hard_boundaries) &&
+    isMinutes(v.soft_boundary_slots) &&
+    isMinutes(v.preferred_focus_slots) &&
+    isMinutes(v.max_daily_work_minutes) &&
+    isMinutes(v.minimum_break_minutes) &&
+    strings(v.rules)
+  );
+}
+
+function isSolver(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    v.name === "Google OR-Tools CP-SAT" &&
+    isNonEmpty(v.status) &&
+    (v.objective_value === null ||
+      (typeof v.objective_value === "number" && Number.isFinite(v.objective_value))) &&
+    isMinutes(v.wall_time_seconds)
+  );
+}
+
+export function isPlanResponse(body: unknown): body is PlanResponse {
+  return (
+    isObj(body) &&
+    (body.status === "optimal" ||
+      body.status === "feasible" ||
+      body.status === "partial" ||
+      body.status === "infeasible") &&
+    body.slot_minutes === 15 &&
+    arrayOf(body.blocks, isBlock) &&
+    isMinutes(body.requested_work_minutes) &&
+    isMinutes(body.target_work_minutes) &&
+    isMinutes(body.scheduled_work_minutes) &&
+    isMinutes(body.unscheduled_work_minutes) &&
+    isMinutes(body.requested_personal_minutes) &&
+    isMinutes(body.target_personal_minutes) &&
+    isMinutes(body.scheduled_personal_minutes) &&
+    isMinutes(body.unscheduled_personal_minutes) &&
+    isSolver(body.solver) &&
+    isConstraintsSummary(body.constraints_summary) &&
+    strings(body.warnings)
+  );
+}
+
+export function isApprovedPlanRecord(body: unknown): body is ApprovedPlanRecord {
+  return (
+    isObj(body) &&
+    body.version === 1 &&
+    isStr(body.approved_at) &&
+    !Number.isNaN(Date.parse(body.approved_at)) &&
+    isPlanResponse(body.plan)
   );
 }

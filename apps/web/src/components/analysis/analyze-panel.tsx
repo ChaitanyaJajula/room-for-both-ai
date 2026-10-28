@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { PlanPanel } from "@/components/plan/plan-panel";
 import { analyzeWeek, getDemoCalendar } from "@/lib/api";
+import { clearApprovedPlan } from "@/lib/approved-plan";
 import type { CalendarCommitment, WeeklyAnalysisResponse } from "@/types/analysis";
 import type { PlanningProfile } from "@/types/planning-profile";
 
@@ -14,7 +16,12 @@ type State =
   | { phase: "idle" }
   | { phase: "loading" }
   | { phase: "error"; message: string }
-  | { phase: "done"; result: WeeklyAnalysisResponse; commitments: CalendarCommitment[] };
+  | {
+      phase: "done";
+      runId: number;
+      result: WeeklyAnalysisResponse;
+      commitments: CalendarCommitment[];
+    };
 
 const primaryButton =
   "rounded-full bg-teal-700 px-6 py-3 text-base font-semibold text-white shadow-soft hover:bg-teal-800 disabled:cursor-wait disabled:opacity-70";
@@ -30,6 +37,7 @@ export function AnalyzePanel({
 }) {
   const [state, setState] = useState<State>({ phase: "idle" });
   const inFlight = useRef(false);
+  const runCount = useRef(0);
   const resultRef = useRef<HTMLDivElement>(null);
   const loading = state.phase === "loading";
 
@@ -43,6 +51,8 @@ export function AnalyzePanel({
   const run = async () => {
     if (inFlight.current) return;
     inFlight.current = true;
+    // A fresh analysis proposes new outcomes, so an earlier approved plan no longer applies.
+    clearApprovedPlan();
     setState({ phase: "loading" });
     try {
       const calendar = await getDemoCalendar();
@@ -54,7 +64,7 @@ export function AnalyzePanel({
       const analysis = await analyzeWeek(profile, commitments);
       setState(
         analysis.ok
-          ? { phase: "done", result: analysis.data, commitments }
+          ? { phase: "done", runId: ++runCount.current, result: analysis.data, commitments }
           : { phase: "error", message: analysis.message },
       );
     } finally {
@@ -122,7 +132,16 @@ export function AnalyzePanel({
           </div>
         ) : null}
         {state.phase === "done" ? (
-          <AnalysisResults result={state.result} commitments={state.commitments} />
+          <>
+            <AnalysisResults result={state.result} commitments={state.commitments} />
+            <PlanPanel
+              key={state.runId}
+              profile={profile}
+              commitments={state.commitments}
+              workOutcome={state.result.analysis.work_outcome}
+              personalOutcome={state.result.analysis.personal_outcome}
+            />
+          </>
         ) : null}
       </div>
     </section>

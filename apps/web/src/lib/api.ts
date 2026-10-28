@@ -3,7 +3,8 @@ import type {
   DemoCalendarResponse,
   WeeklyAnalysisResponse,
 } from "@/types/analysis";
-import { isDemoCalendar, isWeeklyAnalysisResponse } from "@/lib/guards";
+import { isDemoCalendar, isPlanResponse, isWeeklyAnalysisResponse } from "@/lib/guards";
+import type { PlanRequest, PlanResponse } from "@/types/plan";
 import type {
   PlanningProfile,
   PlanningProfileValidationResponse,
@@ -94,6 +95,7 @@ const UNREACHABLE = "We could not reach the Room for Both service. Check that it
 const UNEXPECTED = "The service sent a response we did not understand. Please try again.";
 const CALENDAR_TIMEOUT_MS = 15_000;
 const ANALYSIS_TIMEOUT_MS = 90_000;
+const PLAN_TIMEOUT_MS = 15_000;
 
 // Shared fetch + JSON handling. Error messages are fixed strings: raw bodies, URLs and
 // status details are never passed to the UI.
@@ -144,5 +146,22 @@ export function analyzeWeek(
     },
     isWeeklyAnalysisResponse,
     "Your week could not be analyzed right now. Please try again.",
+  );
+}
+
+export function generatePlan(
+  request: PlanRequest,
+  signal?: AbortSignal,
+): Promise<ApiResult<PlanResponse>> {
+  return requestJson(
+    "/api/v1/plan/generate",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: signal ?? AbortSignal.timeout(PLAN_TIMEOUT_MS),
+    },
+    isPlanResponse,
+    "Your weekly plan could not be built right now. Please try again.",
   );
 }

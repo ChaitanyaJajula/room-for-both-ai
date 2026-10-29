@@ -3,6 +3,7 @@ import type {
   DemoCalendarResponse,
   WeeklyAnalysisResponse,
 } from "@/types/analysis";
+import { resolveApiBaseUrl } from "@/lib/api-base";
 import {
   isDemoCalendar,
   isEvaluationReport,
@@ -18,11 +19,8 @@ import type {
   PlanningProfileValidationResponse,
 } from "@/types/planning-profile";
 
-// Public, non-secret configuration only. Never put credentials in NEXT_PUBLIC_* variables.
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(
-  /\/+$/,
-  "",
-);
+// Read at build time (Next.js inlines NEXT_PUBLIC_* values). See lib/api-base.ts.
+const API_BASE_URL = resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 
 export type ValidateResult =
   | { ok: true; profile: PlanningProfile }

@@ -1,0 +1,22 @@
+# Render Blueprint for the FastAPI backend. The Next.js frontend is deployed separately on Vercel.
+# Secrets are never stored here: `sync: false` makes Render ask for the value in the dashboard.
+services:
+  - type: web
+    name: room-for-both-api
+    runtime: python
+    rootDir: services/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    branch: main
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.14.8"
+      # Private. Enter it in the Render dashboard only.
+      - key: NEBIUS_API_KEY
+        sync: false
+      # The final Vercel production origin, e.g. https://your-project.vercel.app (no path).
+      # Comma-separate several origins. This replaces the localhost default.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

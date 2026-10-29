@@ -12,6 +12,7 @@ import { DAYS_OF_WEEK, type PlanningProfile } from "@/types/planning-profile";
 import type { RepairStrategy } from "@/types/repair";
 
 import { MemorySuggestion } from "@/components/memory/memory-suggestion";
+import { PhoneNotificationCard } from "@/components/notification/phone-notification-card";
 
 import { RepairPanel, strategyLabel } from "./repair-panel";
 
@@ -247,7 +248,15 @@ export function PlanPanel({
       {ready?.approvedAt ? (
         // Keyed by the approval, so approving a revised plan offers a fresh suggestion.
         <MemorySuggestion
-          key={ready.approvedAt}
+          key={`memory-${ready.approvedAt}`}
+          personalMinutes={ready.plan.scheduled_personal_minutes}
+        />
+      ) : null}
+
+      {ready?.approvedAt ? (
+        <PhoneNotificationCard
+          key={`notification-${ready.approvedAt}`}
+          workMinutes={ready.plan.scheduled_work_minutes}
           personalMinutes={ready.plan.scheduled_personal_minutes}
         />
       ) : null}

@@ -1,6 +1,7 @@
 // Runtime checks for backend JSON, so a malformed response never reaches rendering.
 import type { DemoCalendarResponse, WeeklyAnalysisResponse } from "@/types/analysis";
 import type { ApprovedPlanRecord, PlanResponse } from "@/types/plan";
+import type { EvaluationReport } from "@/types/evaluation";
 import type { ConflictResponse, RepairResponse } from "@/types/repair";
 import { DAYS_OF_WEEK } from "@/types/planning-profile";
 
@@ -319,5 +320,78 @@ export function isRepairResponse(body: unknown): body is RepairResponse {
     (body.reasoning_source === "nemotron" || body.reasoning_source === "fallback") &&
     recommended.length === 1 &&
     recommended[0].id === body.recommended_option_id
+  );
+}
+
+// --- Reliability evaluation ------------------------------------------------------------------
+
+const isCount = (v: unknown): v is number => isMinutes(v) && Number.isInteger(v);
+const CATEGORIES = ["capacity", "scheduling", "conflict_detection", "repair_validation"];
+const UTC_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$/;
+
+function isEvaluationCase(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isNonEmpty(v.id) &&
+    isStr(v.category) &&
+    CATEGORIES.includes(v.category) &&
+    isNonEmpty(v.name) &&
+    typeof v.passed === "boolean" &&
+    isMinutes(v.duration_ms) &&
+    isCount(v.checks_passed) &&
+    isCount(v.checks_total) &&
+    v.checks_total > 0 &&
+    v.checks_passed <= v.checks_total &&
+    v.passed === (v.checks_passed === v.checks_total) &&
+    isNonEmpty(v.summary)
+  );
+}
+
+export function isEvaluationReport(body: unknown): body is EvaluationReport {
+  if (
+    !isObj(body) ||
+    !(body.status === "passed" || body.status === "failed") ||
+    body.suite_name !== "Room for Both deterministic reliability suite" ||
+    !isStr(body.generated_at) ||
+    !UTC_ISO.test(body.generated_at) ||
+    Number.isNaN(Date.parse(body.generated_at)) ||
+    body.model_calls_made !== 0 ||
+    !isObj(body.summary) ||
+    !Array.isArray(body.cases) ||
+    !body.cases.every(isEvaluationCase) ||
+    !arrayOf(body.architecture_guarantees, isNonEmpty)
+  ) {
+    return false;
+  }
+
+  const s = body.summary;
+  const cases = body.cases as Obj[];
+  const ids = new Set(cases.map((c) => c.id));
+  const passed = cases.filter((c) => c.passed === true).length;
+  const sum = (key: string) => cases.reduce((total, c) => total + (c[key] as number), 0);
+  if (
+    !isCount(s.total_cases) ||
+    !isCount(s.passed_cases) ||
+    !isCount(s.failed_cases) ||
+    !isMinutes(s.pass_rate_percent) ||
+    !isCount(s.total_checks) ||
+    !isCount(s.passed_checks) ||
+    !isMinutes(s.total_duration_ms)
+  ) {
+    return false;
+  }
+  const expectedRate = s.total_cases === 0 ? 0 : (100 * s.passed_cases) / s.total_cases;
+  return (
+    ids.size === cases.length &&
+    s.total_cases === cases.length &&
+    s.passed_cases === passed &&
+    s.passed_cases + s.failed_cases === s.total_cases &&
+    s.passed_checks <= s.total_checks &&
+    s.total_checks === sum("checks_total") &&
+    s.passed_checks === sum("checks_passed") &&
+    s.pass_rate_percent <= 100 &&
+    Math.abs(s.pass_rate_percent - expectedRate) <= 0.01 &&
+    Math.abs(s.total_duration_ms - sum("duration_ms")) <= 0.05 &&
+    body.status === (cases.length > 0 && passed === cases.length ? "passed" : "failed")
   );
 }

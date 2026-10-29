@@ -5,10 +5,12 @@ import type {
 } from "@/types/analysis";
 import {
   isDemoCalendar,
+  isEvaluationReport,
   isPlanResponse,
   isRepairResponse,
   isWeeklyAnalysisResponse,
 } from "@/lib/guards";
+import type { EvaluationReport } from "@/types/evaluation";
 import type { PlanRequest, PlanResponse } from "@/types/plan";
 import type { RepairRequest, RepairResponse } from "@/types/repair";
 import type {
@@ -104,6 +106,8 @@ const ANALYSIS_TIMEOUT_MS = 90_000;
 const PLAN_TIMEOUT_MS = 15_000;
 // Several OR-Tools solves run before Nemotron ranks the candidates.
 const REPAIR_TIMEOUT_MS = 90_000;
+// The fixed suite solves several OR-Tools models, so it takes a few seconds.
+const EVALUATION_TIMEOUT_MS = 60_000;
 
 // Shared fetch + JSON handling. Error messages are fixed strings: raw bodies, URLs and
 // status details are never passed to the UI.
@@ -188,5 +192,14 @@ export function requestRepairOptions(
     },
     isRepairResponse,
     "Repair options could not be built right now. Please try again.",
+  );
+}
+
+export function runEvaluation(signal?: AbortSignal): Promise<ApiResult<EvaluationReport>> {
+  return requestJson(
+    "/api/v1/evaluation/run",
+    { method: "POST", signal: signal ?? AbortSignal.timeout(EVALUATION_TIMEOUT_MS) },
+    isEvaluationReport,
+    "The evaluation could not be run right now. Please try again.",
   );
 }

@@ -4,6 +4,7 @@ services:
   - type: web
     name: room-for-both-api
     runtime: python
+    plan: free
     rootDir: services/api
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT

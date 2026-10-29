@@ -26,11 +26,14 @@ setting at the frontend.
      so enter a placeholder and fix it in step 3 of the Vercel section. Use commas for several
      origins. **This value replaces the built-in `http://localhost:3000` default**, so local
      development is not allowed in production unless you list it.
-3. Choose the instance plan in the dashboard. The Blueprint deliberately does not set one.
-   - A free service sleeps when idle, so the first request after a pause can take about a minute
-     (a cold start). The first analysis would then look broken.
-   - For judging or a demo, an always-on plan with 512 MB of memory is recommended if affordable.
-     The scheduler uses Google OR-Tools, so avoid anything smaller.
+3. The Blueprint creates the backend on Render's **free plan** (`plan: free` in `render.yaml`).
+   - No payment card is required for this initial free deployment, unless Render independently
+     asks for identity verification.
+   - A free service can sleep after a period of inactivity, so the first request after a pause
+     may be a cold start that takes about a minute. The first analysis can look slow or broken
+     because of that; wait and retry.
+   - Upgrading to an always-on plan during judging is optional, not required. If you do upgrade,
+     the scheduler uses Google OR-Tools, so choose at least 512 MB of memory.
 4. Deploy. The Blueprint uses Python 3.14.8 (`PYTHON_VERSION` and `services/api/.python-version`),
    installs `requirements.txt`, and starts `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
    If Render does not offer that Python version, pick a supported 3.x version in the dashboard and

@@ -64,6 +64,24 @@ def test_health_check_path_is_the_health_route(service):
     assert TestClient(app).get(service["healthCheckPath"]).status_code == 200
 
 
+def test_blueprint_uses_the_free_plan(blueprint, service):
+    assert service["plan"] == "free"
+    assert "plan" not in env_vars(service)
+
+    def plans(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "plan":
+                    yield value
+                yield from plans(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from plans(item)
+
+    # No paid plan identifier is configured anywhere in the Blueprint.
+    assert list(plans(blueprint)) == ["free"]
+
+
 def test_auto_deploys_from_main(service):
     assert service["branch"] == "main"
     assert service["autoDeployTrigger"] == "commit"

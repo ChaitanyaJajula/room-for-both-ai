@@ -3,8 +3,14 @@ import type {
   DemoCalendarResponse,
   WeeklyAnalysisResponse,
 } from "@/types/analysis";
-import { isDemoCalendar, isPlanResponse, isWeeklyAnalysisResponse } from "@/lib/guards";
+import {
+  isDemoCalendar,
+  isPlanResponse,
+  isRepairResponse,
+  isWeeklyAnalysisResponse,
+} from "@/lib/guards";
 import type { PlanRequest, PlanResponse } from "@/types/plan";
+import type { RepairRequest, RepairResponse } from "@/types/repair";
 import type {
   PlanningProfile,
   PlanningProfileValidationResponse,
@@ -96,6 +102,8 @@ const UNEXPECTED = "The service sent a response we did not understand. Please tr
 const CALENDAR_TIMEOUT_MS = 15_000;
 const ANALYSIS_TIMEOUT_MS = 90_000;
 const PLAN_TIMEOUT_MS = 15_000;
+// Several OR-Tools solves run before Nemotron ranks the candidates.
+const REPAIR_TIMEOUT_MS = 90_000;
 
 // Shared fetch + JSON handling. Error messages are fixed strings: raw bodies, URLs and
 // status details are never passed to the UI.
@@ -163,5 +171,22 @@ export function generatePlan(
     },
     isPlanResponse,
     "Your weekly plan could not be built right now. Please try again.",
+  );
+}
+
+export function requestRepairOptions(
+  request: RepairRequest,
+  signal?: AbortSignal,
+): Promise<ApiResult<RepairResponse>> {
+  return requestJson(
+    "/api/v1/repair/options",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: signal ?? AbortSignal.timeout(REPAIR_TIMEOUT_MS),
+    },
+    isRepairResponse,
+    "Repair options could not be built right now. Please try again.",
   );
 }

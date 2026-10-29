@@ -9,6 +9,9 @@ import { DAY_LABELS, formatTime } from "@/lib/setup";
 import type { CalendarCommitment, Outcome } from "@/types/analysis";
 import type { PlanResponse, ScheduledBlock } from "@/types/plan";
 import { DAYS_OF_WEEK, type PlanningProfile } from "@/types/planning-profile";
+import type { RepairStrategy } from "@/types/repair";
+
+import { RepairPanel, strategyLabel } from "./repair-panel";
 
 const LOADING_MESSAGE = "OR-Tools is finding valid time slots for your week…";
 
@@ -16,7 +19,14 @@ type State =
   | { phase: "idle" }
   | { phase: "loading" }
   | { phase: "error"; message: string }
-  | { phase: "ready"; plan: PlanResponse; approvedAt: string | null; saved: boolean };
+  | {
+      phase: "ready";
+      plan: PlanResponse;
+      approvedAt: string | null;
+      saved: boolean;
+      // The repair strategy behind a revised plan; null while this is the original plan.
+      revision: RepairStrategy | null;
+    };
 
 const primaryButton =
   "rounded-full bg-teal-700 px-6 py-3 text-base font-semibold text-white shadow-soft hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70";
@@ -159,7 +169,7 @@ export function PlanPanel({
       });
       setState(
         result.ok
-          ? { phase: "ready", plan: result.data, approvedAt: null, saved: true }
+          ? { phase: "ready", plan: result.data, approvedAt: null, saved: true, revision: null }
           : { phase: "error", message: result.message },
       );
     } finally {
@@ -172,6 +182,15 @@ export function PlanPanel({
     const approvedAt = new Date().toISOString();
     const saved = saveApprovedPlan(state.plan, approvedAt);
     setState({ ...state, approvedAt, saved });
+  };
+
+  // A verified repair replaces the approved plan. It is saved under the same versioned key
+  // with a fresh approval time, so the earlier plan can no longer be restored.
+  const applyRevision = (revised: PlanResponse, strategy: RepairStrategy) => {
+    if (state.phase !== "ready" || !state.approvedAt || state.revision) return;
+    const approvedAt = new Date().toISOString();
+    const saved = saveApprovedPlan(revised, approvedAt);
+    setState({ phase: "ready", plan: revised, approvedAt, saved, revision: strategy });
   };
 
   const ready = state.phase === "ready" ? state : null;
@@ -207,7 +226,13 @@ export function PlanPanel({
         ) : null}
         {ready?.approvedAt ? (
           <p className="rounded-2xl border border-teal-700/40 bg-teal-700/10 p-4 text-sm font-semibold text-teal-800">
-            ✓ Plan approved · {new Date(ready.approvedAt).toLocaleString()}
+            ✓ {ready.revision ? "Revised plan approved" : "Plan approved"} ·{" "}
+            {new Date(ready.approvedAt).toLocaleString()}
+            {ready.revision ? (
+              <span className="mt-1 block font-normal">
+                Applied: {strategyLabel(ready.revision)}
+              </span>
+            ) : null}
             {ready.saved ? null : (
               <span className="mt-1 block font-normal">
                 This browser could not save the approval, so it lasts only while this page is open.
@@ -233,7 +258,7 @@ export function PlanPanel({
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold">
-              {ready.approvedAt ? "Approved plan" : "Draft plan"}
+              {ready.revision ? "Revised plan" : ready.approvedAt ? "Approved plan" : "Draft plan"}
             </span>
             <span className="text-sm text-muted">
               {ready.plan.status === "partial"
@@ -273,7 +298,7 @@ export function PlanPanel({
           ) : null}
 
           <div className="flex flex-wrap gap-3">
-            {canApprove ? (
+            {canApprove && !ready.revision ? (
               <button
                 type="button"
                 onClick={approve}
@@ -296,6 +321,18 @@ export function PlanPanel({
               {ready.plan.solver.wall_time_seconds}s
             </span>
           </p>
+
+          {ready.approvedAt && ready.plan.status !== "infeasible" ? (
+            <RepairPanel
+              plan={ready.plan}
+              profile={profile}
+              commitments={commitments}
+              workOutcome={workOutcome}
+              personalOutcome={personalOutcome}
+              appliedStrategy={ready.revision}
+              onApproveRevised={applyRevision}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>

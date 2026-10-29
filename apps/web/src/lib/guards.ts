@@ -1,6 +1,7 @@
 // Runtime checks for backend JSON, so a malformed response never reaches rendering.
 import type { DemoCalendarResponse, WeeklyAnalysisResponse } from "@/types/analysis";
 import type { ApprovedPlanRecord, PlanResponse } from "@/types/plan";
+import type { ConflictResponse, RepairResponse } from "@/types/repair";
 import { DAYS_OF_WEEK } from "@/types/planning-profile";
 
 type Obj = Record<string, unknown>;
@@ -179,5 +180,144 @@ export function isApprovedPlanRecord(body: unknown): body is ApprovedPlanRecord 
     isStr(body.approved_at) &&
     !Number.isNaN(Date.parse(body.approved_at)) &&
     isPlanResponse(body.plan)
+  );
+}
+
+// --- Conflict detection and repair options ---------------------------------------------------
+
+const TIME = /^\d{2}:\d{2}(:\d{2})?$/;
+const isTime = (v: unknown) => isStr(v) && TIME.test(v);
+const STRATEGIES = ["move", "simplify", "delegate", "drop"];
+const isStrategy = (v: unknown) => isStr(v) && STRATEGIES.includes(v);
+
+function isConflictRecord(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    (v.conflict_type === "scheduled_block" ||
+      v.conflict_type === "existing_commitment" ||
+      v.conflict_type === "hard_boundary") &&
+    isNonEmpty(v.conflicting_item_id) &&
+    isNonEmpty(v.conflicting_item_title) &&
+    isDay(v.day) &&
+    isTime(v.conflicting_start_time) &&
+    isTime(v.conflicting_end_time) &&
+    isTime(v.overlap_start_time) &&
+    isTime(v.overlap_end_time) &&
+    isMinutes(v.overlap_minutes) &&
+    (v.outcome_type === null || v.outcome_type === "work" || v.outcome_type === "personal")
+  );
+}
+
+export function isConflictResponse(body: unknown): body is ConflictResponse {
+  if (
+    !isObj(body) ||
+    !(body.status === "clear" || body.status === "conflict") ||
+    typeof body.conflict_detected !== "boolean" ||
+    typeof body.repair_required !== "boolean" ||
+    body.repair_required !== body.conflict_detected ||
+    body.conflict_detected !== (body.status === "conflict") ||
+    !isCommitment(body.unexpected_commitment) ||
+    !isTime((body.unexpected_commitment as Obj).start_time) ||
+    !isTime((body.unexpected_commitment as Obj).end_time) ||
+    !arrayOf(body.conflicts, isConflictRecord) ||
+    !arrayOf(body.affected_block_ids, isNonEmpty) ||
+    !isNonEmpty(body.summary)
+  ) {
+    return false;
+  }
+  const affected = body.affected_block_ids as string[];
+  const conflicts = body.conflicts as unknown[];
+  if (new Set(affected).size !== affected.length) return false;
+  // A clear result has nothing in it; a conflict result names at least one record.
+  return body.status === "clear"
+    ? conflicts.length === 0 && affected.length === 0
+    : conflicts.length > 0;
+}
+
+const VALIDATION_FLAGS = [
+  "valid",
+  "no_unexpected_commitment_overlap",
+  "no_existing_commitment_overlap",
+  "no_hard_boundary_overlap",
+  "no_internal_block_overlap",
+  "targets_consistent",
+];
+
+// Only fully verified options are ever returned by the backend, so every flag must be true.
+function isVerifiedValidation(v: unknown): boolean {
+  return isObj(v) && VALIDATION_FLAGS.every((flag) => v[flag] === true) && strings(v.notes);
+}
+
+function isRepairOption(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStrategy(v.id) &&
+    v.strategy === v.id &&
+    typeof v.rank === "number" &&
+    Number.isInteger(v.rank) &&
+    v.rank >= 1 &&
+    isNonEmpty(v.title) &&
+    isNonEmpty(v.explanation) &&
+    typeof v.recommended === "boolean" &&
+    isPlanResponse(v.revised_plan) &&
+    v.revised_plan.status !== "infeasible" &&
+    isMinutes(v.original_work_minutes) &&
+    isMinutes(v.original_personal_minutes) &&
+    isMinutes(v.target_work_minutes) &&
+    isMinutes(v.target_personal_minutes) &&
+    isMinutes(v.reduced_work_minutes) &&
+    isMinutes(v.reduced_personal_minutes) &&
+    isMinutes(v.delegated_work_minutes) &&
+    isMinutes(v.dropped_work_minutes) &&
+    isMinutes(v.dropped_personal_minutes) &&
+    isVerifiedValidation(v.validation)
+  );
+}
+
+export function isRepairResponse(body: unknown): body is RepairResponse {
+  if (
+    !isObj(body) ||
+    !(
+      body.status === "not_needed" ||
+      body.status === "manual_resolution_required" ||
+      body.status === "options_ready" ||
+      body.status === "no_valid_options"
+    ) ||
+    !(
+      body.reasoning_source === "nemotron" ||
+      body.reasoning_source === "fallback" ||
+      body.reasoning_source === "not_used"
+    ) ||
+    body.model_provider !== "Nebius Token Factory" ||
+    !isNonEmpty(body.model_name) ||
+    !(body.recommended_option_id === null || isStrategy(body.recommended_option_id)) ||
+    !(body.fallback_message === null || isStr(body.fallback_message)) ||
+    !isConflictResponse(body.conflict) ||
+    !arrayOf(body.options, isRepairOption)
+  ) {
+    return false;
+  }
+
+  const options = body.options as Obj[];
+  const ids = new Set(options.map((o) => o.id));
+  const ranks = options.map((o) => o.rank as number).sort((a, b) => a - b);
+  if (ids.size !== options.length || !ranks.every((rank, i) => rank === i + 1)) return false;
+  // not_needed means a clear result; every other status is reached only after a conflict.
+  if ((body.status === "not_needed") !== (body.conflict.status === "clear")) return false;
+
+  // Only options_ready involves a ranking, so every other status carries no model source.
+  if (body.status !== "options_ready") {
+    return (
+      options.length === 0 &&
+      body.recommended_option_id === null &&
+      body.reasoning_source === "not_used"
+    );
+  }
+  const recommended = options.filter((o) => o.recommended === true);
+  return (
+    options.length > 0 &&
+    (body.reasoning_source === "nemotron" || body.reasoning_source === "fallback") &&
+    recommended.length === 1 &&
+    recommended[0].id === body.recommended_option_id
   );
 }

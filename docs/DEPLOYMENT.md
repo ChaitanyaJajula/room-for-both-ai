@@ -8,8 +8,18 @@ Room for Both runs as two services from this one repository:
 | Next.js frontend | Vercel | `apps/web` |
 | NVIDIA Nemotron inference | Nebius Token Factory | called by the Render backend |
 
-Nothing here has been deployed yet. These are the steps to do it. Never put a real key in a file,
-a commit, a GitHub issue, a Vercel variable or anything under `NEXT_PUBLIC_*`.
+The application is live and production-tested:
+
+| Part | URL |
+| --- | --- |
+| Frontend (Vercel) | https://room-for-both-ai.vercel.app |
+| Reliability dashboard | https://room-for-both-ai.vercel.app/evaluation |
+| Backend API (Render) | https://room-for-both-api.onrender.com |
+
+These are the steps to reproduce the deployment, for example in your own accounts. The backend
+runs on Render's free plan, so after idleness the first request can cold-start and take about one
+minute. Never put a real key in a file, a commit, a GitHub issue, a Vercel variable or anything
+under `NEXT_PUBLIC_*`.
 
 Do the services in this order: backend first, then frontend, then point the backend's CORS
 setting at the frontend.

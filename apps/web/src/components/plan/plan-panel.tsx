@@ -11,6 +11,8 @@ import type { PlanResponse, ScheduledBlock } from "@/types/plan";
 import { DAYS_OF_WEEK, type PlanningProfile } from "@/types/planning-profile";
 import type { RepairStrategy } from "@/types/repair";
 
+import { MemorySuggestion } from "@/components/memory/memory-suggestion";
+
 import { RepairPanel, strategyLabel } from "./repair-panel";
 
 const LOADING_MESSAGE = "OR-Tools is finding valid time slots for your week…";
@@ -241,6 +243,14 @@ export function PlanPanel({
           </p>
         ) : null}
       </div>
+
+      {ready?.approvedAt ? (
+        // Keyed by the approval, so approving a revised plan offers a fresh suggestion.
+        <MemorySuggestion
+          key={ready.approvedAt}
+          personalMinutes={ready.plan.scheduled_personal_minutes}
+        />
+      ) : null}
 
       {state.phase === "error" ? (
         <div role="alert" className="rounded-2xl border border-terracotta/50 bg-terracotta/10 p-5">

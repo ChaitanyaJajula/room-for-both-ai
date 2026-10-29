@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { MemoryPanel } from "@/components/memory/memory-panel";
 import { SetupForm } from "@/components/setup/setup-form";
 import { SiteHeader } from "@/components/site-header";
 
@@ -16,6 +17,9 @@ export default function SetupPage() {
         <h1 className="py-6 font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
           Tell us what your week needs to respect
         </h1>
+        <div className="mb-6">
+          <MemoryPanel />
+        </div>
         <SetupForm />
       </main>
     </>

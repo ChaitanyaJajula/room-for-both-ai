@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import {
   DAY_LABELS,
@@ -12,6 +12,7 @@ import {
   type SetupFormValues,
 } from "@/lib/setup";
 import { validatePlanningProfile } from "@/lib/api";
+import { loadPlanningMemory, usePlanningMemory } from "@/lib/planning-memory";
 import { DAYS_OF_WEEK, type DayOfWeek, type PlanningProfile } from "@/types/planning-profile";
 
 import { Field, Section, SelectInput, TextInput } from "./fields";
@@ -46,9 +47,27 @@ export function SetupForm() {
   const [errors, setErrors] = useState<SetupErrors>({});
   const [profile, setProfile] = useState<PlanningProfile | null>(null);
   const [status, setStatus] = useState<SubmitStatus>({ state: "idle" });
+  // True once the saved preference filled the personal-time field when this page loaded.
+  const [fromMemory, setFromMemory] = useState(false);
+  const memory = usePlanningMemory();
   const inFlight = useRef(false);
   const statusRef = useRef<HTMLDivElement>(null);
   const submitting = status.state === "submitting";
+
+  // Fill the field from saved memory once, on load. Later saves or deletes never rewrite what
+  // the user is editing, and the user can still change the value for this run.
+  // Browser storage cannot be read during render without a hydration mismatch, so this one-time
+  // sync with it happens after mount.
+  useEffect(() => {
+    const saved = loadPlanningMemory();
+    if (!saved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time sync from browser storage
+    setValues((prev) => ({
+      ...prev,
+      protectedPersonalMinutesPerWeek: saved.protectedPersonalMinutesPerWeek,
+    }));
+    setFromMemory(true);
+  }, []);
 
   // Any edit invalidates the validated profile, so analysis never runs on stale settings.
   const set = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) => {
@@ -264,6 +283,13 @@ export function SetupForm() {
               onChange={num("protectedPersonalMinutesPerWeek")}
               aria-invalid={Boolean(errors.protectedPersonalMinutesPerWeek)}
             />
+            {fromMemory &&
+            memory !== null &&
+            values.protectedPersonalMinutesPerWeek === memory.protectedPersonalMinutesPerWeek ? (
+              <p className="text-xs font-medium text-teal-800">
+                <span aria-hidden="true">✓ </span>Applied from your saved memory
+              </p>
+            ) : null}
           </Field>
         </Section>
 
